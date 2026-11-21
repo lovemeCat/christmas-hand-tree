@@ -762,37 +762,6 @@
         scriptText('Merry Christmas', height * (.84 + .03 * smooth(progress)), textIn, Math.min(width, height) * .085);
       }
 
-      // 返回到开头：粒子从当前场景散开，再重新收拢成那颗自转的粒子光球
-      function drawAssembleOrb(now, progress) {
-        const cx = width * .5;
-        const cy = height * .43;
-        const size = Math.min(width, height);
-        const radius = size * .088;
-        const gather = smooth(Math.max(0, (progress - .32) / .68));
-        const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 2.2);
-        halo.addColorStop(0, rgbaOf(palette.mintBright, .28 * gather));
-        halo.addColorStop(.45, rgbaOf(palette.pinkBright, .11 * gather));
-        halo.addColorStop(1, rgbaOf(palette.pinkBright, 0));
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = halo;
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius * 2.2, 0, Math.PI * 2);
-        ctx.fill();
-        particles.forEach((particle, index) => {
-          const target = orbPosition(orbDots[index], now);
-          const orbit = particle.drift + now * .0007;
-          const scatterX = cx + Math.cos(orbit) * size * (.06 + particle.spread * .34);
-          const scatterY = cy + Math.sin(orbit) * size * (.05 + particle.spread * .26) * .8;
-          const ease = smooth(Math.max(0, Math.min(1, (progress - particle.spread * .18) / .82)));
-          const x = scatterX + (target.x - scatterX) * ease;
-          const y = scatterY + (target.y - scatterY) * ease;
-          const depth = .5 + (target.depth - .5) * ease;
-          const dotSize = particle.size * (.6 + depth * .78) * (1 - .3 * (1 - ease));
-          point(x, y, dotSize, particle.tint === 'mint' ? palette.mint : palette.pink, .3 + depth * .68, dotSize * 4.6);
-        });
-        point(cx, cy, size * .012, palette.pearl, .42 * gather, 22);
-      }
-
       function drawHeartToCore(now, alpha = 1) {
         const gather = Math.min(1, (now - sceneSince) / 760);
         const amount = smooth(gather);
@@ -861,12 +830,12 @@
           fireworkCycle = -1;
         }
         if (message) setStatus(message);
-        if (hasCamera) cameraButton.textContent = scene === 'orb' ? '关闭摄像头' : '回到光球';
+        if (hasCamera) cameraButton.textContent = scene === 'orb' ? '关闭摄像头' : '回到圣诞树';
       }
 
       function render(now) {
         const duration = prefersReduced ? 1
-          : (priorScene === 'orb' ? 2600 : (scene === 'orb' && priorScene ? 1500 : (scene === 'tree' && priorScene ? 1600 : 1250)));
+          : (priorScene === 'orb' ? 2600 : (scene === 'tree' && priorScene ? 1600 : 1250));
         const mix = priorScene ? Math.min(1, (now - sceneSince) / duration) : 1;
         ctx.clearRect(0, 0, width, height);
         ctx.shadowBlur = 0;
@@ -874,8 +843,6 @@
         const scenes = { tree: drawTree, heart: drawHeart, fireworks: drawFireworks, orb: drawOrb };
         if (priorScene === 'orb' && scene === 'tree' && mix < 1) {
           drawOrbToTree(now, mix);
-        } else if (scene === 'orb' && priorScene && mix < 1) {
-          drawAssembleOrb(now, mix);
         } else if (priorScene === 'tree' && scene === 'heart' && mix < 1) {
           drawTreeToHeartMorph(now, mix);
         } else if (scene === 'tree' && priorScene && mix < 1) {
@@ -940,10 +907,10 @@
       }
 
       function restartExperience() {
-        // 返回按钮 / 鼠标兜底：粒子散开，重新收拢成开场那颗光球
-        if (scene !== 'orb') {
+        // 返回：粒子散开，再收拢成圣诞树（和「爱心 → 树」同款过渡）
+        if (scene !== 'tree') {
           priorScene = scene;
-          scene = 'orb';
+          scene = 'tree';
         } else {
           priorScene = null;
         }
@@ -957,9 +924,9 @@
         gestureFrames = 0;
         gestureMuteUntil = performance.now() + 1400;
         hint.classList.remove('is-fist', 'is-open', 'is-point');
-        hint.textContent = hasCamera ? '伸出食指 · 点一下光球' : '';
-        cameraButton.textContent = hasCamera ? '关闭摄像头' : '点击进行手势控制';
-        setStatus(hasCamera ? '已回到开头的光球：伸出食指朝它点一下，圣诞树就会长出来' : '已回到最初的粒子光球，摄像头已关闭；点一下光球就会长出圣诞树');
+        hint.textContent = hasCamera ? '将手放入画面' : '';
+        cameraButton.textContent = hasCamera ? '回到圣诞树' : '点击进行手势控制';
+        setStatus(hasCamera ? '已回到圣诞树页面：握拳 → 爱心；张开手掌 → 烟花' : '已回到最初的圣诞树页面，摄像头已关闭');
       }
 
       // 回到圣诞树后彻底关掉摄像头：释放设备、停止推理，下次点击再重新开启
@@ -1166,7 +1133,7 @@
           tracking = true;
           lastVideoTime = -1;
           cameraButton.disabled = false;
-          cameraButton.textContent = scene === 'orb' ? '关闭摄像头' : '回到光球';
+          cameraButton.textContent = scene === 'orb' ? '关闭摄像头' : '回到圣诞树';
           // 开摄像头不跳场景：在光球就等食指来点，在树/爱心/烟花就直接继续识别
           stableGesture = 'waiting';
           gesture = 'waiting';
