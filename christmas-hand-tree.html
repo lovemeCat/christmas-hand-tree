@@ -498,8 +498,10 @@
       ];
 
       let bgCache = null;
+      let codeCache = null;
+      let codePeriod = 0;
 
-      // 背景（渐变 + 代码回声）只在尺寸/配色变化时画一次，之后每帧只贴图
+      // 背景渐变只在尺寸/配色变化时画一次，之后每帧只贴图
       function buildBackground() {
         const w = Math.max(1, Math.round(width));
         const h = Math.max(1, Math.round(height));
@@ -522,32 +524,59 @@
         g.fillStyle = haze;
         g.fillRect(0, 0, w, h);
         g.globalAlpha = 1;
+        buildCodeStrip(w, h);
+      }
+
+      // 左侧的源代码回声：预渲染成两段首尾相接的长条，每帧只换贴图位置，就能一直往上滚
+      function buildCodeStrip(w, h) {
         const size = Math.max(7, w * .0092);
         const lineHeight = size * 1.62;
+        const period = Math.max(h, Math.ceil(lineHeight * (sourceEcho.length + 6)));
         const left = w * .035;
         const top = h * .175;
-        const fade = g.createLinearGradient(left, 0, left + w * .235, 0);
-        fade.addColorStop(0, 'rgba(150, 246, 214, .0001)');
-        fade.addColorStop(.07, 'rgba(158, 250, 220, .24)');
-        fade.addColorStop(.44, 'rgba(158, 250, 220, .15)');
-        fade.addColorStop(1, 'rgba(158, 250, 220, 0)');
+        codeCache = document.createElement('canvas');
+        codeCache.width = Math.max(1, Math.round(w * dpr));
+        codeCache.height = Math.max(1, Math.round(period * 2 * dpr));
+        const g = codeCache.getContext('2d');
+        g.setTransform(dpr, 0, 0, dpr, 0, 0);
         g.font = `${size}px "JetBrains Mono", "Cascadia Mono", Consolas, "SFMono-Regular", ui-monospace, monospace`;
         g.textAlign = 'left';
         g.textBaseline = 'top';
-        g.fillStyle = fade;
-        sourceEcho.forEach((line, index) => {
-          if (!line) return;
-          const feather = Math.min(1, index / 3, (sourceEcho.length - index - 1) / 3);
-          g.globalAlpha = .55 + .45 * feather;
-          g.fillText(line, left, top + index * lineHeight);
-        });
+        g.fillStyle = 'rgba(158, 250, 220, .9)';
+        for (let repeat = 0; repeat < 2; repeat += 1) {
+          const originY = top + repeat * period;
+          sourceEcho.forEach((line, index) => {
+            if (!line) return;
+            const feather = Math.min(1, index / 3, (sourceEcho.length - index - 1) / 3);
+            g.globalAlpha = .52 + .48 * feather;
+            g.fillText(line, left, originY + index * lineHeight);
+          });
+        }
         g.globalAlpha = 1;
+        // 左边浓、往右渐隐
+        const fade = g.createLinearGradient(left, 0, left + w * .235, 0);
+        fade.addColorStop(0, 'rgba(255, 255, 255, .06)');
+        fade.addColorStop(.07, 'rgba(255, 255, 255, .78)');
+        fade.addColorStop(.44, 'rgba(255, 255, 255, .5)');
+        fade.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        g.globalCompositeOperation = 'destination-in';
+        g.fillStyle = fade;
+        g.fillRect(0, 0, w, period * 2);
+        g.globalCompositeOperation = 'source-over';
+        codePeriod = period;
       }
 
       function drawBackground(now) {
         ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
         if (bgCache) ctx.drawImage(bgCache, 0, 0, width, height);
+        if (codeCache && codePeriod) {
+          // 约 11px/秒 往上滚：代码像在背景里缓缓流动，底部也会不断补上来
+          const scroll = (now * .011) % codePeriod;
+          ctx.globalAlpha = .34;
+          ctx.drawImage(codeCache, 0, -scroll, width, codePeriod * 2);
+          ctx.globalAlpha = 1;
+        }
         snow.forEach((flake, index) => {
           const fall = ((flake.y + now * .000057 * flake.z) % 1) * height;
           const sway = Math.sin(now * .0007 + flake.phase + index) * width * .014 * flake.z;
