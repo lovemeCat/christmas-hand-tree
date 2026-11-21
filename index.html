@@ -899,15 +899,16 @@
         const mcpMean = mcps.reduce((sum, i) => sum + distance(landmarks[i], wrist), 0) / mcps.length;
         const extended = tips.reduce((count, tip, index) => count + (distance(landmarks[tip], wrist) > distance(landmarks[pips[index]], wrist) * 1.28 ? 1 : 0), 0);
         // 食指伸出、中指/无名指/小指收拢 = 指向前方（用来“点”光球）
-        // 和握拳的关键区别：食指要伸得明显更远，且食指与中指指尖离得开（握拳时两根指尖是并在一起的）
+        // 和握拳的关键区别：食指明显比指根更远，或食指与中指指尖离开（握拳时两根指尖并着）
         const palmSize = Math.max(distance(landmarks[0], landmarks[9]), .0001);
-        const indexOut = distance(landmarks[8], wrist) > distance(landmarks[6], wrist) * 1.5;
-        const indexApart = distance(landmarks[8], landmarks[12]) > palmSize * .42;
+        const indexRatio = distance(landmarks[8], wrist) / Math.max(distance(landmarks[6], wrist), .0001);
+        const indexApart = distance(landmarks[8], landmarks[12]) / palmSize;
+        const onlyIndex = extended <= 1;
         const restFolded = [12, 16, 20].every((tip, index) =>
-          distance(landmarks[tip], wrist) < distance(landmarks[[10, 14, 18][index]], wrist) * 1.12);
-        if (indexOut && indexApart && (restFolded || extended <= 1) && extended <= 2) return 'point';
-        // 握拳：四指全收，且食指中指指尖是靠拢的（避免把“指”误判成拳）
-        if (tipMean < mcpMean * 1.3 && extended <= 1 && distance(landmarks[8], landmarks[12]) < palmSize * .55) return 'fist';
+          distance(landmarks[tip], wrist) < distance(landmarks[[10, 14, 18][index]], wrist) * 1.24);
+        if (indexRatio > 1.28 && (indexApart > .26 || onlyIndex) && (restFolded || onlyIndex) && extended <= 2) return 'point';
+        // 握拳：四指全收，且食指不是明显伸出去的（避免把“指”误判成拳）
+        if (tipMean < mcpMean * 1.36 && extended <= 1 && indexRatio < 1.2) return 'fist';
         if (tipMean > pipMean * 1.27 && tipMean > mcpMean * 1.95 && extended >= 3) return 'open';
         return 'tracking';
       }
@@ -922,7 +923,9 @@
         gestureGate = null;
         if (next === gesture) gestureFrames += 1;
         else { gesture = next; gestureFrames = 1; }
-        if (gestureFrames < 3 || stableGesture === next) return;
+        // 点击手势只要 2 帧就触发，握拳/张开维持 3 帧，避免“点不动”
+        const need = next === 'point' ? 2 : 3;
+        if (gestureFrames < need || stableGesture === next) return;
         stableGesture = next;
         hint.classList.toggle('is-fist', next === 'fist');
         hint.classList.toggle('is-open', next === 'open');
