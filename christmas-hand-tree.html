@@ -40,8 +40,8 @@
 
     #christmas-hand-tree .stage {
       position: relative;
-      width: min(100%, calc((100vh - 118px) * 1.6), 1040px);
-      width: min(100%, calc((100dvh - 118px) * 1.6), 1040px);
+      width: min(100%, calc((100vh - 142px) * 1.6), 1040px);
+      width: min(100%, calc((100dvh - 142px) * 1.6), 1040px);
       max-width: 100%;
       aspect-ratio: 16 / 10;
       overflow: hidden;
@@ -88,6 +88,10 @@
       justify-content: center;
       gap: calc(var(--font-size-base) * .55);
       padding-top: calc(var(--font-size-base) * .8);
+      /* 预留固定高度：状态文字出现/换行时不让整幅画上下跳 */
+      min-height: calc(var(--font-size-base) * 6);
+      align-content: center;
+      text-align: center;
     }
 
     #christmas-hand-tree .gesture-status {
@@ -176,20 +180,29 @@
       }
 
       function updatePalette() {
-        palette = {
+        const next = {
           night: css('--night'), deep: css('--night-deep'), mint: css('--mint'), mintBright: css('--mint-bright'),
           pink: css('--pink'), pinkBright: css('--pink-bright'), pearl: css('--pearl'), ink: css('--stage-ink')
         };
+        const changed = Object.keys(next).some((key) => palette[key] !== next[key]);
+        palette = next;
+        if (!changed) return;
         spriteCache.clear();
         rgbaCache.clear();
         textCache.clear();
+        bgCache = null;
       }
 
       function resize() {
         const box = canvas.getBoundingClientRect();
-        dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-        width = Math.max(1, Math.floor(box.width));
-        height = Math.max(1, Math.floor(box.height));
+        const nextDpr = Math.min(window.devicePixelRatio || 1, 1.5);
+        const nextWidth = Math.max(1, Math.floor(box.width));
+        const nextHeight = Math.max(1, Math.floor(box.height));
+        // 尺寸没变就什么都不做：重新赋值 canvas 宽高会清空画布并触发整屏重绘（看起来像刷新）
+        if (bgCache && nextWidth === width && nextHeight === height && nextDpr === dpr) return;
+        dpr = nextDpr;
+        width = nextWidth;
+        height = nextHeight;
         canvas.width = Math.floor(width * dpr);
         canvas.height = Math.floor(height * dpr);
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1059,7 +1072,7 @@
 
       cameraButton.addEventListener('click', startCamera);
       document.fonts && document.fonts.ready.then(() => { updatePalette(); textCache.clear(); buildBackground(); });
-      new ResizeObserver(resize).observe(root);
+      new ResizeObserver(resize).observe(canvas.parentElement);
       resize();
       requestAnimationFrame(render);
       // 模型已经随页面内嵌，页面一打开就在后台把引擎备好，点按钮时不用等
