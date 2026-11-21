@@ -915,30 +915,43 @@
 
       function handleGesture(next) {
         if (performance.now() < gestureMuteUntil) return;
+        // 开场这一步放宽到「看到手就算点」：食指/握拳/张手都放行，连姿态不明（tracking）也算
+        if (scene === 'orb') {
+          if (!next || next === 'waiting') return;
+          if (gestureGate && next === gestureGate) return;
+          if (next === gesture) gestureFrames += 1;
+          else { gesture = next; gestureFrames = 1; }
+          const need = next === 'tracking' ? 4 : 2;
+          if (gestureFrames < need) {
+            if (next === 'tracking') {
+              hint.textContent = '看到手了…';
+              setStatus('已经看到手，把手张开一点点或伸出食指，圣诞树马上长出来');
+            }
+            return;
+          }
+          stableGesture = next;
+          hint.classList.add('is-point');
+          hint.textContent = '已识别';
+          // 触发后 4 秒静默期：树的生长动画 2.6 秒，结束后 1.4 秒内手怎么动都不切场景
+          gestureMuteUntil = performance.now() + 4000;
+          gestureGate = next;
+          setScene('tree', '手势已识别：光球散开，长成圣诞树');
+          return;
+        }
         // 只有开场的光球需要食指；其它场景里出现的“指”一律忽略，免得和握拳互相顶掉
-        if (next === 'point' && scene !== 'orb') return;
+        if (next === 'point') return;
         // 场景过渡动画没结束前，不接受握拳/张开，避免树还没长出来就被切走
         if ((next === 'fist' || next === 'open') && priorScene) return;
         if (gestureGate && next === gestureGate) return;
         gestureGate = null;
         if (next === gesture) gestureFrames += 1;
         else { gesture = next; gestureFrames = 1; }
-        // 点击手势只要 2 帧就触发，握拳/张开维持 3 帧，避免“点不动”
-        const need = next === 'point' ? 2 : 3;
-        if (gestureFrames < need || stableGesture === next) return;
+        if (gestureFrames < 3 || stableGesture === next) return;
         stableGesture = next;
         hint.classList.toggle('is-fist', next === 'fist');
         hint.classList.toggle('is-open', next === 'open');
-        hint.classList.toggle('is-point', next === 'point');
-        if (next === 'point') {
-          hint.textContent = '食指';
-          if (scene === 'orb') {
-            // 点完给足 4 秒静默期：树的生长动画 2.6 秒，结束后 1.4 秒内手怎么动都不切场景
-            gestureMuteUntil = performance.now() + 4000;
-            gestureGate = 'point';
-            setScene('tree', '食指点击：光球散开，长成圣诞树');
-          }
-        } else if (next === 'fist') {
+        hint.classList.remove('is-point');
+        if (next === 'fist') {
           hint.textContent = '握拳';
           if (scene === 'tree' || scene === 'fireworks') setScene('heart', '握拳识别：粒子凝成一颗爱心');
         } else if (next === 'open') {
@@ -1073,8 +1086,8 @@
                     : { modelAssetPath: MODEL_URL, delegate },
                   runningMode: 'VIDEO',
                   numHands: 1,
-                  minHandDetectionConfidence: .5,
-                  minHandPresenceConfidence: .5,
+                  minHandDetectionConfidence: .25,
+                  minHandPresenceConfidence: .25,
                   minTrackingConfidence: .45
                 });
                 // CPU 是兜底，不再测速；GPU 单帧超过 40ms 就不划算
@@ -1110,7 +1123,7 @@
       function pumpFrames() {
         if (!tracking) return;
         const now = performance.now();
-        const gate = inferCost > 18 ? 85 : 32;
+        const gate = inferCost > 20 ? 55 : 24;
         if (!inferring && handEngine && video.readyState >= 2 && video.currentTime !== lastVideoTime && now - lastInferAt >= gate) {
           lastVideoTime = video.currentTime;
           lastInferAt = now;
