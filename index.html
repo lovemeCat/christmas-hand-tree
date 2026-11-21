@@ -80,6 +80,7 @@
 
     #christmas-hand-tree .camera-hint.is-fist { color: var(--pink-bright); opacity: 1; }
     #christmas-hand-tree .camera-hint.is-open { color: var(--mint-bright); opacity: 1; }
+    #christmas-hand-tree .camera-hint.is-point { color: var(--pearl, #fff6ef); opacity: 1; }
 
     #christmas-hand-tree .controls {
       display: flex;
@@ -158,7 +159,7 @@
       let height = 0;
       let dpr = 1;
       let last = performance.now();
-      let scene = 'tree';
+      let scene = 'orb';
       let priorScene = null;
       let sceneSince = performance.now();
       let hasCamera = false;
@@ -307,50 +308,37 @@
         return { x: rawX, y: rawY + 6.5 };
       }
 
-      // 树顶的粒子爱心：用树同款的小发光点（薄荷绿 + 浅粉）拼出有厚度的爱心
-      const HEART_HALF_DEPTH = 6;
+      // 树顶的立体爱心：沿心形轮廓做一层层切面，前后收窄，成为真正有厚度的实体
+      const HEART_DEPTH = .58;
       const crownHeartDots = (() => {
         const dots = [];
-        const outlineDots = prefersReduced ? 40 : 76;
-        for (let layer = 0; layer < 2; layer += 1) {
-          const z = layer === 0 ? HEART_HALF_DEPTH : -HEART_HALF_DEPTH;
-          for (let i = 0; i < outlineDots; i += 1) {
-            const t = (i / outlineDots) * Math.PI * 2;
-            const curve = heartCurve(t);
-            dots.push({
-              x: curve.x,
-              y: curve.y,
-              z: z + Math.sin(t * 3 + layer * 1.7) * .5,
-              tint: i % 3 === 0 ? 'pink' : 'mint',
-              size: rnd(1.8, 3.05),
-              phase: rnd(0, Math.PI * 2),
-              echo: layer === 0 && i % 2 === 0,
-              sparkle: i % 13 === 0
-            });
-            // 每隔一颗在内侧补一颗小一点的点，轮廓才有厚度，不像一根细线
-            if (i % 2 === 0) {
-              dots.push({
-                x: curve.x * 1,
-                y: curve.y * 1,
-                z: z - Math.sign(z) * .9,
-                inset: .84,
-                tint: i % 4 === 0 ? 'mint' : 'pink',
-                size: rnd(1.1, 1.95),
-                phase: rnd(0, Math.PI * 2),
-                sparkle: false
-              });
-            }
-          }
-        }
-        for (let i = 0; i < (prefersReduced ? 8 : 18); i += 1) {
+        const shell = prefersReduced ? 110 : 300;
+        for (let i = 0; i < shell; i += 1) {
           const curve = heartCurve(rnd(0, Math.PI * 2));
-          const inward = rnd(.3, .82);
+          const u = rnd(-1, 1);
+          const shrink = Math.sqrt(1 - u * u) * (.975 + rnd(0, .025));
           dots.push({
-            x: curve.x * inward,
-            y: curve.y * inward,
-            z: rnd(-HEART_HALF_DEPTH, HEART_HALF_DEPTH),
+            x: curve.x * shrink / 16,
+            y: curve.y * shrink / 16,
+            z: u * HEART_DEPTH,
+            tint: Math.random() > .42 ? 'pink' : 'mint',
+            size: rnd(1.35, 2.3),
+            phase: rnd(0, Math.PI * 2),
+            sparkle: i % 15 === 0
+          });
+        }
+        // 内部再补一点，转起来中间不至于空
+        for (let i = 0; i < (prefersReduced ? 14 : 30); i += 1) {
+          const curve = heartCurve(rnd(0, Math.PI * 2));
+          const inward = Math.sqrt(rnd(.15, .95));
+          const u = rnd(-.8, .8);
+          const shrink = inward * Math.sqrt(1 - u * u);
+          dots.push({
+            x: curve.x * shrink / 16,
+            y: curve.y * shrink / 16,
+            z: u * HEART_DEPTH,
             tint: i % 2 ? 'pink' : 'mint',
-            size: rnd(1.15, 2.05),
+            size: rnd(.95, 1.6),
             phase: rnd(0, Math.PI * 2),
             sparkle: false
           });
@@ -358,13 +346,12 @@
         return dots;
       })();
 
-      // 绕竖直轴横转（和树的转向一致），深度决定大小与亮度，所以侧转时有体积
+      // 绕竖直轴横转：深度决定大小、亮度，还有一点纵向视差，所以侧过来时是有体积的实体
       function drawCrownHeart(now, x, y, radius, alpha = 1, spin = 0) {
         if (alpha <= .01) return;
         const cosSpin = Math.cos(spin);
         const sinSpin = Math.sin(spin);
-        const scale = radius / 15.4;
-        const halfDepth = HEART_HALF_DEPTH * scale;
+        const scale = radius / 1.02;
         const pulse = 1 + Math.sin(now * .0026) * .05;
 
         ctx.save();
@@ -381,64 +368,72 @@
         ctx.arc(x, y, radius * 1.8, 0, Math.PI * 2);
         ctx.fill();
 
-        // 始终正对观众的一层淡轮廓：横转到侧面时，靠它保住心形剪影
-        ctx.beginPath();
-        for (let i = 0; i <= 76; i += 1) {
-          const curve = heartCurve((i / 76) * Math.PI * 2);
-          const spotX = x + curve.x * scale * 1.02 * pulse;
-          const spotY = y - curve.y * scale * 1.02 * pulse;
-          if (i === 0) ctx.moveTo(spotX, spotY); else ctx.lineTo(spotX, spotY);
-        }
-        ctx.closePath();
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = palette.pinkBright;
-        ctx.globalAlpha = alpha * .05;
-        ctx.fill();
-        // 宽一点、淡一点的描边冒充外发光
-        ctx.globalAlpha = 1;
-        ctx.lineWidth = Math.max(1, radius * .04) * 2.6;
-        ctx.strokeStyle = rgbaOf(palette.pinkBright, .12 * alpha);
-        ctx.stroke();
-        ctx.strokeStyle = palette.pinkBright;
-        ctx.lineWidth = Math.max(1, radius * .04);
-        ctx.globalAlpha = alpha * .34;
-        ctx.stroke();
-
-        // 一直正对观众的一层淡粒子：横转到侧面时靠它保住心形，而不是缩成一根竖条
+        const depthUnit = HEART_DEPTH * scale * pulse;
         crownHeartDots.forEach((dot) => {
-          if (!dot.echo) return;
-          const inset = dot.inset || 1;
-          point(
-            x + dot.x * scale * pulse * inset,
-            y - dot.y * scale * pulse * inset,
-            dot.size * (radius / 42) * .92,
-            dot.tint === 'mint' ? palette.mint : palette.pink,
-            alpha * .42,
-            dot.size * 5
-          );
-        });
-
-        crownHeartDots.forEach((dot) => {
-          const inset = dot.inset || 1;
-          const localX = dot.x * scale * pulse * inset;
-          const localY = dot.y * scale * pulse * inset;
+          const localX = dot.x * scale * pulse;
+          const localY = dot.y * scale * pulse;
           const localZ = dot.z * scale * pulse;
-          const spotX = x + localX * cosSpin + localZ * sinSpin;
-          const spotY = y - localY;
-          const depth = -localX * sinSpin + localZ * cosSpin;
-          const near = Math.max(0, Math.min(1, depth / (halfDepth * 2) + .5));
-          const size = dot.size * (radius / 42) * (dot.sparkle ? 1.75 : 1) * (.74 + near * .52);
+          const rx = localX * cosSpin - localZ * sinSpin;
+          const rz = localX * sinSpin + localZ * cosSpin;
+          const near = Math.max(0, Math.min(1, (rz / (depthUnit * 2)) + .5));
+          const size = dot.size * (radius / 42) * (dot.sparkle ? 1.25 : 1) * (.62 + near * .62);
           const tint = dot.sparkle
             ? (dot.tint === 'mint' ? palette.mintBright : palette.pinkBright)
             : (dot.tint === 'mint' ? palette.mint : palette.pink);
-          const twinkle = .84 + .16 * Math.sin(dot.phase + now * .0035);
-          point(spotX, spotY, size, tint, alpha * (.5 + near * .5) * twinkle * (.58 + .42 * Math.abs(cosSpin)), size * 5.5);
+          const twinkle = .86 + .14 * Math.sin(dot.phase + now * .0035);
+          point(x + rx, y - localY + rz * .16, size, tint, alpha * (.34 + near * .66) * twinkle, size * 2.2);
         });
 
         // 心口一点柔光，避免中间空成黑洞
-        point(x, y + radius * .02, radius * .05, palette.pearl, alpha * .3, radius * .7);
+        point(x, y + radius * .02, radius * .05, palette.pearl, alpha * .26, radius * .7);
         ctx.restore();
       }
+
+      // 初始的粒子光球：所有粒子先聚成一颗会自转的发光球
+      let orbShrink = 1;
+      const orbDots = particles.map(() => ({
+        theta: rnd(0, Math.PI * 2),
+        phi: Math.acos(rnd(-1, 1)),
+        dist: rnd(.72, 1)
+      }));
+
+      function orbPosition(dot, now, shrink = 1) {
+        const theta = dot.theta + now * .0008;
+        const radius = Math.min(width, height) * .088 * dot.dist * shrink;
+        const sx = Math.sin(dot.phi) * Math.cos(theta);
+        const sy = Math.cos(dot.phi);
+        const sz = Math.sin(dot.phi) * Math.sin(theta);
+        return {
+          x: width * .5 + sx * radius,
+          y: height * .43 - sy * radius,
+          depth: (sz + 1) * .5
+        };
+      }
+
+      function drawOrb(now, alpha = 1) {
+        const cx = width * .5;
+        const cy = height * .43;
+        const radius = Math.min(width, height) * .088;
+        const pulse = 1 + Math.sin(now * .0022) * .06;
+        const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 2.1 * pulse);
+        halo.addColorStop(0, rgbaOf(palette.mintBright, .3 * alpha));
+        halo.addColorStop(.45, rgbaOf(palette.pinkBright, .12 * alpha));
+        halo.addColorStop(1, rgbaOf(palette.pinkBright, 0));
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = halo;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * 2.1 * pulse, 0, Math.PI * 2);
+        ctx.fill();
+        particles.forEach((p, index) => {
+          const pos = orbPosition(orbDots[index], now);
+          const size = p.size * (.55 + pos.depth * .8) * pulse;
+          point(pos.x, pos.y, size, p.tint === 'mint' ? palette.mint : palette.pink,
+                alpha * (.28 + pos.depth * .72), size * 4.6);
+        });
+        point(cx, cy, radius * .16 * pulse, palette.pearl, alpha * .45, radius * .6);
+      }
+
 
       const smooth = (value) => value * value * (3 - 2 * value);
 
@@ -561,22 +556,25 @@
         });
       }
 
-      function drawTreeSpirals(now, alpha = 1) {
+      function drawTreeSpirals(now, alpha = 1, grow = 1) {
         const cx = width * .5;
         const top = height * .105;
         const treeH = height * .64;
         const base = Math.min(width * .285, height * .36);
         const turn = now * .00052;
+        const steps = Math.max(1, Math.floor(170 * Math.max(0, Math.min(1, grow))));
         for (let line = 0; line < 2; line += 1) {
           const offset = line * Math.PI;
+          // 从第 9 步开始画，跳过树尖那圈很小的闭合弧，免得看着像一片叶子
+          const startStep = Math.min(9, steps);
           ctx.beginPath();
-          for (let step = 0; step <= 170; step += 1) {
+          for (let step = startStep; step <= steps; step += 1) {
             const t = step / 170;
             const a = t * Math.PI * 9.5 + turn * 2.3 + offset;
             const r = base * t * .9;
             const x = cx + Math.cos(a) * r;
             const y = top + treeH * t - Math.sin(a) * r * .12;
-            if (step === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            if (step === startStep) ctx.moveTo(x, y); else ctx.lineTo(x, y);
           }
           const strokeColor = line ? palette.pinkBright : palette.mintBright;
           ctx.lineWidth = Math.max(1, Math.min(width, height) * .0021);
@@ -602,7 +600,7 @@
         });
         drawTreeSpirals(now, alpha);
         const crownPulse = 1 + Math.sin(now * .004) * .1;
-        drawCrownHeart(now, cx, top - height * .018, Math.min(width, height) * .047 * crownPulse, alpha, now * .0011);
+        drawCrownHeart(now, cx, top - height * .006, Math.min(width, height) * .047 * crownPulse, alpha, now * .0011);
         ctx.restore();
         scriptText('Merry Christmas', height * .87, alpha, Math.min(width, height) * .085);
       }
@@ -649,6 +647,80 @@
         scriptText('Merry Christmas', height * (.87 - amount * .03), 1, Math.min(width, height) * .085);
       }
 
+      // 开场：光球 → 两条螺旋从顶部往下缠绕、逐渐变大勾出树的轮廓 → 粒子贴着螺旋旋进、把树填满
+      function drawOrbToTree(now, progress) {
+        const cx = width * .5;
+        const top = height * .105;
+        const treeH = height * .64;
+        const base = Math.min(width * .285, height * .36);
+        const turn = now * .00052;
+        // 前半段：螺旋一边往下长一边放大，先把圣诞树的轮廓勾出来
+        const grow = smooth(Math.min(1, progress / .6));
+        const lineAlpha = (.55 + .45 * grow) * smooth(Math.min(1, grow / .22));
+        drawTreeSpirals(now, lineAlpha, grow);
+        // 螺旋是由光球的粒子流出去织成的：沿轮廓跑一串粒子做“流动的两条臂”
+        if (grow > .01) {
+          const streak = prefersReduced ? 26 : 78;
+          const sparkRadius = Math.min(width, height);
+          for (let i = 0; i < streak; i += 1) {
+            const line = i % 2;
+            const lag = ((i % 13) / 13) * .26;
+            const t = grow - lag;
+            if (t <= .004) continue;
+            const a = t * Math.PI * 9.5 + turn * 2.3 + (line ? Math.PI : 0);
+            const r = base * t * .92;
+            const x = cx + Math.cos(a) * r;
+            const y = top + treeH * t - Math.sin(a) * r * .12;
+            const fade = smooth(Math.min(1, (grow - t) / .2 + .35)) * lineAlpha;
+            point(x, y, sparkRadius * (.0052 + (i % 5) * .0011), line ? palette.pinkBright : palette.mintBright, fade, sparkRadius * .012);
+          }
+        }
+        // 光球随着螺旋长出来一点点收小、变亮，像被抽成两条丝带
+        orbShrink = 1 - .7 * smooth(Math.min(1, grow));
+        // 光球的光晕随着粒子离开逐渐熄灭
+        const orbFade = 1 - smooth(Math.max(0, Math.min(1, (progress - .42) / .34)));
+        if (orbFade > .01) {
+          const radius = Math.min(width, height) * .088;
+          const halo = ctx.createRadialGradient(width * .5, height * .43, 0, width * .5, height * .43, radius * 2.2);
+          halo.addColorStop(0, rgbaOf(palette.mintBright, .26 * orbFade));
+          halo.addColorStop(.45, rgbaOf(palette.pinkBright, .1 * orbFade));
+          halo.addColorStop(1, rgbaOf(palette.pinkBright, 0));
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = halo;
+          ctx.beginPath();
+          ctx.arc(width * .5, height * .43, radius * 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        const fill = smooth(Math.max(0, Math.min(1, (progress - .5) / .5)));
+        particles.forEach((particle, index) => {
+          const from = orbPosition(orbDots[index], now, orbShrink);
+          const to = treeParticlePosition(particle, now);
+          // 越靠树顶的粒子越早飞出去，形成自上而下流下来的感觉
+          const u = smooth(Math.max(0, Math.min(1, (fill - particle.height * .74) / .26)));
+          // 中继点放在螺旋轮廓上，粒子像是顺着螺旋旋进树里
+          const swirl = particle.height * Math.PI * 9.5 + now * .0012 + (index % 2 ? Math.PI : 0);
+          const swirlR = base * particle.height * .94;
+          const ctrlX = cx + Math.cos(swirl) * swirlR;
+          const ctrlY = top + treeH * particle.height - Math.sin(swirl) * swirlR * .12;
+          const w0 = (1 - u) * (1 - u);
+          const w1 = 2 * u * (1 - u);
+          const w2 = u * u;
+          const x = from.x * w0 + ctrlX * w1 + to.x * w2;
+          const y = from.y * w0 + ctrlY * w1 + to.y * w2;
+          const depth = from.depth + (to.depth - from.depth) * u;
+          const size = particle.size * (.62 + depth * .72) * (1 + u * .12);
+          const sparkle = (index % 61 === 0 ? 1.8 : 1) * (.86 + depth * .5);
+          point(x, y, size * sparkle, particle.tint === 'mint' ? palette.mint : palette.pink,
+                (.32 + depth * .6) * (1 - .5 * grow * (1 - u)), size * 4.8);
+        });
+        const crownIn = smooth(Math.max(0, (progress - .7) / .3));
+        const crownPulse = 1 + Math.sin(now * .004) * .1;
+        drawCrownHeart(now, width * .5, height * .105 - height * .006, Math.min(width, height) * .047 * crownPulse, crownIn, now * .0011);
+        const textIn = smooth(Math.max(0, (progress - .74) / .26));
+        scriptText('Merry Christmas', height * .87, textIn, Math.min(width, height) * .085);
+      }
+
+
       // 回到圣诞树：先让粒子散开，再收拢成树，和「树 → 爱心」同款的粒子过渡
       function drawAssembleTree(now, progress) {
         const cx = width * .5;
@@ -684,7 +756,7 @@
         drawTreeSpirals(now, smooth(Math.max(0, Math.min(1, (progress - .62) / .38))));
         const crownIn = smooth(Math.max(0, (progress - .58) / .42));
         const crownPulse = 1 + Math.sin(now * .004) * .1;
-        drawCrownHeart(now, cx, height * .105 - height * .018, Math.min(width, height) * .047 * crownPulse, crownIn, now * .0011);
+        drawCrownHeart(now, cx, height * .105 - height * .006, Math.min(width, height) * .047 * crownPulse, crownIn, now * .0011);
         if (priorScene === 'fireworks') scriptText('To XiaoHui', height * .52, Math.max(0, 1 - progress / .28), Math.min(width, height) * .116);
         const textIn = priorScene === 'fireworks' ? Math.min(1, Math.max(0, (progress - .28) / .5)) : 1;
         scriptText('Merry Christmas', height * (.84 + .03 * smooth(progress)), textIn, Math.min(width, height) * .085);
@@ -758,16 +830,20 @@
           fireworkCycle = -1;
         }
         if (message) setStatus(message);
+        if (hasCamera) cameraButton.textContent = scene === 'orb' ? '关闭摄像头' : '回到圣诞树';
       }
 
       function render(now) {
-        const duration = prefersReduced ? 1 : (scene === 'tree' && priorScene ? 1600 : 1250);
+        const duration = prefersReduced ? 1
+          : (priorScene === 'orb' ? 2600 : (scene === 'tree' && priorScene ? 1600 : 1250));
         const mix = priorScene ? Math.min(1, (now - sceneSince) / duration) : 1;
         ctx.clearRect(0, 0, width, height);
         ctx.shadowBlur = 0;
         drawBackground(now);
-        const scenes = { tree: drawTree, heart: drawHeart, fireworks: drawFireworks };
-        if (priorScene === 'tree' && scene === 'heart' && mix < 1) {
+        const scenes = { tree: drawTree, heart: drawHeart, fireworks: drawFireworks, orb: drawOrb };
+        if (priorScene === 'orb' && scene === 'tree' && mix < 1) {
+          drawOrbToTree(now, mix);
+        } else if (priorScene === 'tree' && scene === 'heart' && mix < 1) {
           drawTreeToHeartMorph(now, mix);
         } else if (scene === 'tree' && priorScene && mix < 1) {
           drawAssembleTree(now, mix);
@@ -794,6 +870,11 @@
         const pipMean = pips.reduce((sum, i) => sum + distance(landmarks[i], wrist), 0) / pips.length;
         const mcpMean = mcps.reduce((sum, i) => sum + distance(landmarks[i], wrist), 0) / mcps.length;
         const extended = tips.reduce((count, tip, index) => count + (distance(landmarks[tip], wrist) > distance(landmarks[pips[index]], wrist) * 1.28 ? 1 : 0), 0);
+        // 食指伸出、中指/无名指/小指收拢 = 指向前方（用来“点”光球）
+        const indexOut = distance(landmarks[8], wrist) > distance(landmarks[6], wrist) * 1.34;
+        const restFolded = [12, 16, 20].every((tip, index) =>
+          distance(landmarks[tip], wrist) < distance(landmarks[[10, 14, 18][index]], wrist) * 1.2);
+        if (indexOut && restFolded && extended <= 2) return 'point';
         if (tipMean < mcpMean * 1.34 && extended <= 1) return 'fist';
         if (tipMean > pipMean * 1.27 && tipMean > mcpMean * 1.95 && extended >= 3) return 'open';
         return 'tracking';
@@ -809,9 +890,13 @@
         stableGesture = next;
         hint.classList.toggle('is-fist', next === 'fist');
         hint.classList.toggle('is-open', next === 'open');
-        if (next === 'fist') {
+        hint.classList.toggle('is-point', next === 'point');
+        if (next === 'point') {
+          hint.textContent = '食指';
+          if (scene === 'orb') setScene('tree', '食指点击：光球散开，长成圣诞树');
+        } else if (next === 'fist') {
           hint.textContent = '握拳';
-          if (scene !== 'heart') setScene('heart', '握拳识别：粒子凝成一颗爱心');
+          if (scene === 'tree' || scene === 'fireworks') setScene('heart', '握拳识别：粒子凝成一颗爱心');
         } else if (next === 'open') {
           hint.textContent = '张开';
           if (scene === 'heart' || scene === 'tree') setScene('fireworks', '张开手掌：爱心绽为烟花');
@@ -834,11 +919,11 @@
         heroBurst = null;
         fireworkCycle = -1;
         stableGesture = 'waiting';
-        gestureGate = gesture === 'fist' || gesture === 'open' ? gesture : null;
+        gestureGate = gesture === 'fist' || gesture === 'open' || gesture === 'point' ? gesture : null;
         gesture = 'waiting';
         gestureFrames = 0;
         gestureMuteUntil = performance.now() + 1400;
-        hint.classList.remove('is-fist', 'is-open');
+        hint.classList.remove('is-fist', 'is-open', 'is-point');
         hint.textContent = hasCamera ? '将手放入画面' : '';
         setStatus(hasCamera ? '已回到圣诞树页面：握拳 → 爱心；张开手掌 → 烟花' : '已回到最初的圣诞树页面，摄像头已关闭');
       }
@@ -855,7 +940,7 @@
         stableGesture = 'waiting';
         gestureFrames = 0;
         gestureGate = null;
-        hint.classList.remove('is-fist', 'is-open');
+        hint.classList.remove('is-fist', 'is-open', 'is-point');
         hint.textContent = '';
         cameraButton.disabled = false;
         cameraButton.textContent = '点击进行手势控制';
@@ -970,8 +1055,8 @@
         gestureFrames = 0;
         gestureGate = null;
         hint.textContent = '将手放入画面';
-        hint.classList.remove('is-fist', 'is-open');
-        setStatus('等待手势：握拳 → 爱心；张开手掌 → 烟花');
+        hint.classList.remove('is-fist', 'is-open', 'is-point');
+        setStatus(scene === 'orb' ? '等待手势：伸出食指，点一下光球' : '等待手势：握拳 → 爱心；张开手掌 → 烟花');
       }
 
       // 每来一个新摄像头帧才算一次，算不完就丢帧，不排队；按实际推理耗时自动降频
@@ -1001,7 +1086,16 @@
       async function startCamera() {
         if (hasCamera) {
           stopCamera();
-          restartExperience();
+          if (scene !== 'orb') {
+            restartExperience();
+          } else {
+            stableGesture = 'waiting';
+            gesture = 'waiting';
+            gestureFrames = 0;
+            gestureGate = null;
+            hint.textContent = '伸出食指 · 点一下光球';
+            setStatus('摄像头已关闭。也可以直接用鼠标点一下光球，打开圣诞树');
+          }
           return;
         }
         if (!window.isSecureContext) {
@@ -1038,8 +1132,19 @@
           tracking = true;
           lastVideoTime = -1;
           cameraButton.disabled = false;
-          cameraButton.textContent = '回到圣诞树';
-          restartExperience();
+          cameraButton.textContent = scene === 'orb' ? '关闭摄像头' : '回到圣诞树';
+          if (scene === 'orb') {
+            // 开场还没点光球：先别跳场景，等食指来点
+            stableGesture = 'waiting';
+            gesture = 'waiting';
+            gestureFrames = 0;
+            gestureGate = null;
+            gestureMuteUntil = 0;
+            hint.textContent = '伸出食指 · 点一下光球';
+            setStatus('摄像头已就绪：伸出食指，朝空中的光球点一下，圣诞树就会长出来');
+          } else {
+            restartExperience();
+          }
           pumpFrames();
         } catch (error) {
           tracking = false;
@@ -1062,15 +1167,18 @@
         }
       }
 
-      // 摄像头不可用时的兜底：点画面按 树 → 爱心 → 烟花 循环
+      // 摄像头不可用时的兜底：点光球开树，之后按 树 → 爱心 → 烟花 循环
       canvas.addEventListener('click', () => {
         if (hasCamera) return;
-        if (scene === 'tree') setScene('heart', '鼠标预览：粒子凝成爱心');
+        if (scene === 'orb') setScene('tree', '点击光球：粒子散开，长成圣诞树');
+        else if (scene === 'tree') setScene('heart', '鼠标预览：粒子凝成爱心');
         else if (scene === 'heart') setScene('fireworks', '鼠标预览：爱心绽为烟花');
         else restartExperience();
       });
 
       cameraButton.addEventListener('click', startCamera);
+      hint.textContent = '伸出食指 · 点一下光球';
+      setStatus('伸出食指朝空中的光球点一下，圣诞树就会长出来；也可以用鼠标点画面');
       document.fonts && document.fonts.ready.then(() => { updatePalette(); textCache.clear(); buildBackground(); });
       new ResizeObserver(resize).observe(canvas.parentElement);
       resize();
@@ -1079,6 +1187,7 @@
       const warmUp = () => loadLandmarker().catch(() => {});
       setTimeout(warmUp, 400);
     })();
+  
   </script>
 </div>
 
