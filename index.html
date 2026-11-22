@@ -174,6 +174,8 @@
       let palette = {};
       let gestureMuteUntil = 0;   // 回到圣诞树后的一小段手势静默期
       let gestureGate = null;     // 回到圣诞树前正在做的手势，需要换手势或把手移开才重新开始识别
+      let lastHandAt = 0;         // 最近一次看到手的时间，用来判断「手还在画面里」
+      let orbTimer = null;        // 看到手后等 1 秒再开树的计时器
 
       function css(name) {
         return getComputedStyle(root).getPropertyValue(name).trim();
@@ -915,27 +917,20 @@
 
       function handleGesture(next) {
         if (performance.now() < gestureMuteUntil) return;
-        // 开场这一步放宽到「看到手就算点」：食指/握拳/张手都放行，连姿态不明（tracking）也算
+        // 开场这一步放宽到「看到手就算」：食指/握拳/张手都放行，连姿态不明（tracking）也算
         if (scene === 'orb') {
           if (!next || next === 'waiting') return;
           if (gestureGate && next === gestureGate) return;
           if (next === gesture) gestureFrames += 1;
           else { gesture = next; gestureFrames = 1; }
-          const need = next === 'tracking' ? 4 : 2;
-          if (gestureFrames < need) {
-            if (next === 'tracking') {
-              hint.textContent = '看到手了…';
-              setStatus('已经看到手，把手张开一点点或伸出食指，圣诞树马上长出来');
-            }
-            return;
+          // 看到手之后先等 1 秒，手还在画面里才让光球散开
+          lastHandAt = performance.now();
+          const need = next === 'tracking' ? 3 : 2;
+          if (gestureFrames >= need) armOrbTransition(next);
+          else if (next === 'tracking') {
+            hint.textContent = '看到手了…';
+            setStatus('已经看到手，把手放到画面中间，1 秒后圣诞树就会长出来');
           }
-          stableGesture = next;
-          hint.classList.add('is-point');
-          hint.textContent = '已识别';
-          // 触发后 4 秒静默期：树的生长动画 2.6 秒，结束后 1.4 秒内手怎么动都不切场景
-          gestureMuteUntil = performance.now() + 4000;
-          gestureGate = next;
-          setScene('tree', '手势已识别：光球散开，长成圣诞树');
           return;
         }
         // 只有开场的光球需要食指；其它场景里出现的“指”一律忽略，免得和握拳互相顶掉
@@ -963,7 +958,35 @@
         }
       }
 
+      // 开场：看到手之后先亮个提示、等 1 秒，手还在画面里才让光球散开长树
+      function armOrbTransition(pose) {
+        hint.classList.add('is-point');
+        if (orbTimer) {
+          if (!hint.textContent || hint.textContent.indexOf('看到手') < 0) hint.textContent = '已看到手 · 1 秒后开始';
+          return;
+        }
+        hint.textContent = '已看到手 · 1 秒后开始';
+        setStatus('已经看到手，1 秒后圣诞树就会长出来');
+        orbTimer = setTimeout(() => {
+          orbTimer = null;
+          if (scene !== 'orb') return;
+          if (performance.now() - lastHandAt > 1200) {
+            // 这一秒里手离开了画面：不触发，等下次
+            hint.classList.remove('is-point');
+            hint.textContent = '伸出食指 · 点一下光球';
+            setStatus('手离开画面了，把手放回画面中间再试一次');
+            return;
+          }
+          stableGesture = 'point';
+          gestureGate = 'point';
+          // 触发后 4 秒静默期：树的生长动画 2.6 秒，结束后 1.4 秒内手怎么动都不切场景
+          gestureMuteUntil = performance.now() + 4000;
+          setScene('tree', '手势已识别：光球散开，长成圣诞树');
+        }, 1000);
+      }
+
       function restartExperience() {
+        if (orbTimer) { clearTimeout(orbTimer); orbTimer = null; }
         // 返回：粒子散开，再收拢成圣诞树（和「爱心 → 树」同款过渡）
         if (scene !== 'tree') {
           priorScene = scene;
@@ -988,6 +1011,7 @@
 
       // 回到圣诞树后彻底关掉摄像头：释放设备、停止推理，下次点击再重新开启
       function stopCamera() {
+        if (orbTimer) { clearTimeout(orbTimer); orbTimer = null; }
         tracking = false;
         hasCamera = false;
         const stream = video.srcObject;
