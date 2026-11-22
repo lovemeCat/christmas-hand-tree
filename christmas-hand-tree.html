@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>To XiaoHui · 圣诞手势粒子树</title>
   <style>
-    :root { --background: #07111c; --foreground: #fff7fb; --card: #122033; --card-foreground: #fff7fb; --popover: #122033; --popover-foreground: #fff7fb; --primary: #9be8d4; --primary-foreground: #07111c; --secondary: #1a2a3b; --secondary-foreground: #fff7fb; --muted: #1a2a3b; --muted-foreground: #bfd2d6; --accent: #263d52; --accent-foreground: #fff7fb; --destructive: #ff8cae; --border: #29445a; --input: #29445a; --ring: #9be8d4; --font-size-base: 16px; }
+    :root { --background: #07111c; --foreground: #fff7fb; --card: #122033; --card-foreground: #fff7fb; --popover: #122033; --popover-foreground: #fff7fb; --primary: #9be8d4; --primary-foreground: #07111c; --secondary: #1a2a3b; --secondary-foreground: #fff7fb; --muted: #1a2a3b; --muted-foreground: #bfd2d6; --accent: #263d52; --accent-foreground: #fff7fb; --destructive: #ff8cae; --border: #29445a; --input: #29445a; --ring: #9be8d4; --font-size-base: 16px; --ui-font: "Nunito Sans", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif; }
     * { box-sizing: border-box; }
     html, body { height: 100%; }
-    body { margin: 0; height: 100vh; height: 100dvh; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 16px; background: radial-gradient(circle at 20% 0%, #1e3445 0, #07111c 52%); color: var(--foreground); }
+    body { margin: 0; height: 100vh; height: 100dvh; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 16px; background: radial-gradient(circle at 20% 0%, #1e3445 0, #07111c 52%); color: var(--foreground); font-family: var(--ui-font); }
     #christmas-hand-tree { width: min(100%, 1040px); max-height: 100%; display: flex; flex-direction: column; align-items: center; }
-    .btn { min-height: 42px; padding: 9px 15px; border: 1px solid var(--border); border-radius: 999px; background: var(--secondary); color: var(--secondary-foreground); font: 500 14px/1.2 system-ui, sans-serif; }
+    .btn { min-height: 42px; padding: 9px 15px; border: 1px solid var(--border); border-radius: 999px; background: var(--secondary); color: var(--secondary-foreground); font: 500 14px/1.2 var(--ui-font); }
     .btn:hover { background: var(--accent); }
     .btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
     .btn:disabled { opacity: .64; }
@@ -33,7 +33,7 @@
       --pink-bright: color-mix(in srgb, #ffd0e1 94%, var(--foreground));
       --pearl: color-mix(in srgb, #fff7fb 90%, var(--foreground));
       --stage-ink: color-mix(in srgb, var(--foreground) 14%, transparent);
-      font-family: 'Nunito Sans', sans-serif;
+      font-family: var(--ui-font);
       color: var(--foreground);
       width: 100%;
     }
@@ -94,6 +94,13 @@
       text-align: center;
     }
 
+    #christmas-hand-tree .actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: calc(var(--font-size-base) * .5);
+    }
     #christmas-hand-tree .gesture-status {
       min-width: 0;
       max-width: min(100%, calc(var(--font-size-base) * 30));
@@ -116,7 +123,10 @@
     <div class="camera-hint text-small" aria-hidden="true"></div>
   </div>
   <div class="controls">
-    <button class="btn btn-primary" type="button" data-action="camera">点击进行手势控制</button>
+    <div class="actions">
+      <button class="btn btn-primary" type="button" data-action="camera">点击进行手势控制</button>
+      <button class="btn" type="button" data-action="save">保存这一刻</button>
+    </div>
     <span class="gesture-status" aria-live="polite"></span>
   </div>
 
@@ -130,6 +140,7 @@
       const hint = root.querySelector('.camera-hint');
       const status = root.querySelector('.gesture-status');
       const cameraButton = root.querySelector('[data-action="camera"]');
+      const saveButton = root.querySelector('[data-action="save"]');
       const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const particleCount = prefersReduced ? 270 : 580;
       const snowCount = prefersReduced ? 58 : 130;
@@ -863,6 +874,54 @@
         if (hasCamera) cameraButton.textContent = scene === 'orb' ? '关闭摄像头' : '回到圣诞树';
       }
 
+      // 鼠标划过留下的碎光 + 双击炸开的小烟花，纯靠贴图，成本很低
+      let sparks = [];
+      let lastPointerAt = 0;
+
+      function spawnSpark(x, y, count, power) {
+        const base = Math.min(width, height);
+        const born = performance.now();
+        for (let i = 0; i < count; i += 1) {
+          sparks.push({
+            x, y,
+            angle: rnd(0, Math.PI * 2),
+            speed: base * rnd(.008, .05) * power,
+            born,
+            life: rnd(620, 1180),
+            color: Math.random() > .5 ? palette.mintBright : palette.pinkBright,
+            size: rnd(1.6, 3),
+          });
+        }
+        if (sparks.length > 360) sparks = sparks.slice(-360);
+      }
+
+      function drawSparks(now) {
+        if (!sparks.length) return;
+        sparks = sparks.filter((spark) => now - spark.born < spark.life);
+        const fall = Math.min(width, height) * .05;
+        for (let i = 0; i < sparks.length; i += 1) {
+          const spark = sparks[i];
+          const p = (now - spark.born) / spark.life;
+          const travel = spark.speed * (1 - Math.pow(p, 2.2)) * 3.2;
+          point(
+            spark.x + Math.cos(spark.angle) * travel,
+            spark.y + Math.sin(spark.angle) * travel + p * p * fall,
+            spark.size * (1 - p * .3),
+            spark.color,
+            (1 - p) * .9,
+            spark.size * 3
+          );
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      function spotOf(event) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: ((event.clientX - rect.left) / rect.width) * width,
+          y: ((event.clientY - rect.top) / rect.height) * height,
+        };
+      }
       function render(now) {
         const duration = prefersReduced ? 1
           : (priorScene === 'orb' ? 2600 : (scene === 'tree' && priorScene ? 1600 : 1250));
@@ -883,6 +942,7 @@
           if (priorScene && mix < 1) scenes[priorScene](now, 1 - smooth(mix));
           scenes[scene](now, priorScene ? smooth(mix) : 1);
         }
+        drawSparks(now);
         if (mix >= 1) priorScene = null;
         ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
@@ -1259,9 +1319,35 @@
         else restartExperience();
       });
 
+      // 鼠标划过 → 拖出一串碎光；双击 → 原地炸开一朵小烟花；保存按钮 → 导出当前画面
+      canvas.addEventListener('pointermove', (event) => {
+        const now = performance.now();
+        if (now - lastPointerAt < 45) return;
+        lastPointerAt = now;
+        const spot = spotOf(event);
+        spawnSpark(spot.x, spot.y, 5, .5);
+      });
+
+      canvas.addEventListener('dblclick', (event) => {
+        const spot = spotOf(event);
+        spawnSpark(spot.x, spot.y, 46, 1);
+        if (!hasCamera) setStatus('双击：一朵小烟花 ✦');
+      });
+
+      saveButton.addEventListener('click', () => {
+        const stamp = new Date();
+        const pad = (value) => String(value).padStart(2, '0');
+        const name = 'merry-christmas-' + stamp.getFullYear() + pad(stamp.getMonth() + 1) + pad(stamp.getDate())
+          + '-' + pad(stamp.getHours()) + pad(stamp.getMinutes()) + pad(stamp.getSeconds()) + '.png';
+        const link = document.createElement('a');
+        link.download = name;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        setStatus('已经把这一刻存成 PNG，去下载目录看看吧');
+      });
       cameraButton.addEventListener('click', startCamera);
       hint.textContent = '伸出食指 · 点一下光球';
-      setStatus('伸出食指朝空中的光球点一下，圣诞树就会长出来；也可以用鼠标点画面');
+      setStatus('伸出食指朝空中的光球点一下，圣诞树就会长出来；鼠标点画面也行，双击还能放小烟花');
       document.fonts && document.fonts.ready.then(() => { updatePalette(); textCache.clear(); buildBackground(); });
       new ResizeObserver(resize).observe(canvas.parentElement);
       resize();
