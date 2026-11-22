@@ -1012,6 +1012,14 @@
         } else if (next === 'open') {
           hint.textContent = '张开';
           if (scene === 'heart' || scene === 'tree') setScene('fireworks', '张开手掌：爱心绽为烟花');
+          // 张开就收工：让烟花先亮起来，然后把摄像头关掉，省得一直占着摄像头
+          if (scene === 'fireworks') {
+            setTimeout(() => {
+              if (!hasCamera) return;
+              stopCamera();
+              setStatus('张开成功，烟花已经放好，摄像头已关闭');
+            }, 700);
+          }
         } else {
           hint.textContent = '追踪中';
           setStatus('正在识别手势…');
